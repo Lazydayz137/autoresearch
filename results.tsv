@@ -1,3 +1,4 @@
 commit	val_bpb	memory_gb	status	description
 a95680b	0.000000	0.0	crash	baseline: stock train.py against MTG corpus (32k vocab, 7 train + 1 val shard) — CUDA OOM, only ~5.7GB free with Livepeer containers and embed_server resident
 0f2d967	0.000000	0.0	crash	baseline retry: clean wiring (prepare.py = MTG fork), Livepeer stopped, ~20GB VRAM headroom
+31252d6	0.000000	22.49	crash	baseline: train.py default (123M params, ctx=2048), full 24GB VRAM (embed_server evicted) — still OOM at first forward pass, allocated 22.17GB before failing on a 256MB bfloat16 buf alloc
