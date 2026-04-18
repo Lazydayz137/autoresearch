@@ -1,12 +1,20 @@
 """
-One-time data preparation for autoresearch experiments.
-Downloads data shards and trains a BPE tokenizer.
+One-time data preparation for autoresearch experiments — MTG fork.
+
+Mission B1 fork of prepare.py. Points at the pre-assembled MTG corpus and
+tokenizer under ~/.cache/autoresearch/mtg/ (Steps 1+2 already shipped).
+No downloads, no tokenizer training — both were done out-of-band.
+
+Only config constants and the __main__ block diverge from prepare.py;
+the runtime classes (Tokenizer, make_dataloader, evaluate_bpb) and the
+SPLIT_PATTERN / SPECIAL_TOKENS / MAX_SEQ_LEN / TIME_BUDGET / EVAL_TOKENS
+constants are byte-identical to upstream.
 
 Usage:
-    python prepare.py                  # full prep (download + tokenizer)
-    python prepare.py --num-shards 8   # download only 8 shards (for testing)
+    uv run prepare_mtg.py              # smoke-test: load shards + tokenizer,
+                                       # yield one batch, print its shape.
 
-Data and tokenizer are stored in ~/.cache/autoresearch/.
+Data and tokenizer live at ~/.cache/autoresearch/mtg/.
 """
 
 import os
@@ -35,14 +43,14 @@ EVAL_TOKENS = 40 * 524288  # number of tokens for val eval
 # Configuration
 # ---------------------------------------------------------------------------
 
-CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "autoresearch")
+CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "autoresearch", "mtg")
 DATA_DIR = os.path.join(CACHE_DIR, "data")
 TOKENIZER_DIR = os.path.join(CACHE_DIR, "tokenizer")
-BASE_URL = "https://huggingface.co/datasets/karpathy/climbmix-400b-shuffle/resolve/main"
-MAX_SHARD = 6542 # the last datashard is shard_06542.parquet
-VAL_SHARD = MAX_SHARD  # pinned validation shard (shard_06542)
+BASE_URL = "file://" + DATA_DIR  # corpus is local; no HTTP source
+MAX_SHARD = 7  # our highest shard index: shard_00000..shard_00007.parquet
+VAL_SHARD = MAX_SHARD  # pinned validation shard (shard_00007)
 VAL_FILENAME = f"shard_{VAL_SHARD:05d}.parquet"
-VOCAB_SIZE = 8192
+VOCAB_SIZE = 32_000  # matches the BPE tokenizer trained in Step 2
 
 # BPE split pattern (GPT-4 style, with \p{N}{1,2} instead of {1,3})
 SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,2}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"""
@@ -368,21 +376,57 @@ def evaluate_bpb(model, tokenizer, batch_size):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Prepare data and tokenizer for autoresearch")
-    parser.add_argument("--num-shards", type=int, default=10, help="Number of training shards to download (-1 = all). Val shard is always pinned.")
-    parser.add_argument("--download-workers", type=int, default=8, help="Number of parallel download workers")
+    # MTG fork: corpus + tokenizer already exist (Steps 1+2). This block
+    # just verifies the wiring end-to-end — shards discoverable, tokenizer
+    # loadable, dataloader yields a real batch.
+    parser = argparse.ArgumentParser(description="Smoke-test MTG data + tokenizer wiring")
+    parser.add_argument("--batch-size", type=int, default=4, help="Smoke-test batch size (rows)")
     args = parser.parse_args()
-
-    num_shards = MAX_SHARD if args.num_shards == -1 else args.num_shards
 
     print(f"Cache directory: {CACHE_DIR}")
     print()
 
-    # Step 1: Download data
-    download_data(num_shards, download_workers=args.download_workers)
+    # Step 1: verify shards exist
+    parquet_files = list_parquet_files()
+    if not parquet_files:
+        print(f"ERROR: no parquet shards in {DATA_DIR}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Found {len(parquet_files)} shards in {DATA_DIR}:")
+    for p in parquet_files:
+        print(f"  {os.path.basename(p)}")
+    val_path = os.path.join(DATA_DIR, VAL_FILENAME)
+    if not os.path.exists(val_path):
+        print(f"ERROR: missing val shard {val_path}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Val shard: {VAL_FILENAME}")
     print()
 
-    # Step 2: Train tokenizer
-    train_tokenizer()
+    # Step 2: load tokenizer
+    tokenizer_pkl = os.path.join(TOKENIZER_DIR, "tokenizer.pkl")
+    if not os.path.exists(tokenizer_pkl):
+        print(f"ERROR: missing tokenizer at {tokenizer_pkl}", file=sys.stderr)
+        sys.exit(1)
+    tokenizer = Tokenizer.from_directory()
+    vocab_size = tokenizer.get_vocab_size()
+    print(f"Tokenizer: vocab_size={vocab_size:,} (expected VOCAB_SIZE={VOCAB_SIZE:,})")
+    assert vocab_size == VOCAB_SIZE, f"vocab mismatch: {vocab_size} != {VOCAB_SIZE}"
+
+    # Step 3: verify token_bytes lookup is loadable on CPU
+    token_bytes = get_token_bytes(device="cpu")
+    print(f"token_bytes tensor: shape={tuple(token_bytes.shape)}, dtype={token_bytes.dtype}")
+    assert token_bytes.shape[0] == vocab_size
     print()
-    print("Done! Ready to train.")
+
+    # Step 4: yield a single training batch and inspect shape / first tokens.
+    # Requires CUDA because make_dataloader pins/ships to GPU.
+    if not torch.cuda.is_available():
+        print("WARNING: CUDA unavailable; skipping dataloader smoke test.")
+        sys.exit(0)
+    print(f"Smoke-testing dataloader: B={args.batch_size}, T={MAX_SEQ_LEN}, split=train")
+    loader = make_dataloader(tokenizer, args.batch_size, MAX_SEQ_LEN, "train")
+    x, y, epoch = next(loader)
+    print(f"Batch shape: inputs={tuple(x.shape)}, targets={tuple(y.shape)}, epoch={epoch}")
+    print(f"First row, first 32 input tokens: {x[0, :32].tolist()}")
+    print(f"First row, decoded preview: {tokenizer.decode(x[0, :64].tolist())!r}")
+    print()
+    print("Smoke test passed. Ready to train (Step 4 — not run here).")
