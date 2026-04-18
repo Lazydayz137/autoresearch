@@ -1,2 +1,3 @@
 commit	val_bpb	memory_gb	status	description
 a95680b	0.000000	0.0	crash	baseline: stock train.py against MTG corpus (32k vocab, 7 train + 1 val shard) — CUDA OOM, only ~5.7GB free with Livepeer containers and embed_server resident
+0f2d967	0.000000	0.0	crash	baseline retry: clean wiring (prepare.py = MTG fork), Livepeer stopped, ~20GB VRAM headroom
