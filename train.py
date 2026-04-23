@@ -446,7 +446,7 @@ WARMDOWN_RATIO = 0.5    # fraction of time budget for LR warmdown
 FINAL_LR_FRAC = 0.0     # final LR as fraction of initial
 
 # Model size
-DEPTH = 8               # number of transformer layers
+DEPTH = 4               # shrunk to match 40M-token corpus size (was 8 = 123M params; 4 ≈ 25M)
 DEVICE_BATCH_SIZE = 128  # stock Karpathy config on A100 (A100 has 80GB; 3090-floor was 32)
 
 # ---------------------------------------------------------------------------
