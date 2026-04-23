@@ -3,3 +3,4 @@ a95680b	0.000000	0.0	crash	baseline: stock train.py against MTG corpus (32k voca
 0f2d967	0.000000	0.0	crash	baseline retry: clean wiring (prepare.py = MTG fork), Livepeer stopped, ~20GB VRAM headroom
 31252d6	0.000000	22.49	crash	baseline: train.py default (123M params, ctx=2048), full 24GB VRAM (embed_server evicted) — still OOM at first forward pass, allocated 22.17GB before failing on a 256MB bfloat16 buf alloc
 91d5703	1.154342	15.4	success	mtg-v0 baseline bs=32 ctx=2048 (bs=128 stock + bs=64 both OOM on 3090; bs=32 peak=15.4GB; 108 steps, 3 epochs, 56.6M tokens, mfu=5.38%). First non-crash run.
+1a0dd1d	0.912071	15.4	success	A100 baseline reproduction bs=32 ctx=2048 — 201 steps (vs 108 on 3090), 105.4M tokens (vs 56.6M), mfu=10.52% (vs 5.38%), same peak_vram=15.4GB. 21% better val_bpb than 3090 for same compute budget.
