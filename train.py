@@ -627,3 +627,19 @@ print(f"total_tokens_M:   {total_tokens / 1e6:.1f}")
 print(f"num_steps:        {step}")
 print(f"num_params_M:     {num_params / 1e6:.1f}")
 print(f"depth:            {DEPTH}")
+
+# --- Save final checkpoint ------------------------------------------------
+import os as _os
+_ckpt_dir = _os.environ.get("CHECKPOINT_DIR", "/workspace/checkpoints")
+_os.makedirs(_ckpt_dir, exist_ok=True)
+_ckpt_path = _os.path.join(_ckpt_dir, "model.pt")
+torch.save({
+    "model_state_dict": model.state_dict(),
+    "config": asdict(config),
+    "val_bpb": float(val_bpb),
+    "depth": DEPTH,
+    "num_params_M": float(num_params / 1e6),
+    "total_tokens_M": float(total_tokens / 1e6),
+    "num_steps": step,
+}, _ckpt_path)
+print(f"checkpoint_saved: {_ckpt_path}")
