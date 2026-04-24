@@ -229,7 +229,9 @@ def main():
     with torch.device("meta"):
         model = GPT(cfg)
     model.to_empty(device=device)
-    model.load_state_dict(ckpt["model_state_dict"])
+    sd = ckpt["model_state_dict"]
+    sd = {k[10:] if k.startswith("_orig_mod.") else k: v for k, v in sd.items()}
+    model.load_state_dict(sd)
     model.to(dtype=torch.bfloat16)
     model.train(False)
 
